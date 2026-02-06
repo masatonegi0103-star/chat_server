@@ -5,12 +5,8 @@ import struct
 import os
 from cryptography.fernet import Fernet
 
-# =====================
-# 基本設定
-# =====================
-
 HOST = "0.0.0.0"
-PORT = int(os.environ.get("PORT", 59181))
+PORT = int(os.environ.get("PORT", 16812))
 
 FERNET_KEY = os.environ.get(
     "FERNET_KEY",
@@ -51,8 +47,19 @@ def recv_packet(sock):
     return recvall(sock, size)
 
 # =====================
-# broadcast
+# send helpers
 # =====================
+
+def send_calendar(conn):
+    payload = {
+        "type": "calendar_all",
+        "data": [
+            {"date": d, "events": e}
+            for d, e in calendar_data.items()
+        ]
+    }
+    send_packet(conn, payload)
+
 
 def broadcast_calendar():
     payload = {
@@ -87,7 +94,6 @@ def handle_client(conn, addr):
         while True:
             raw = recv_packet(conn)
             if not raw:
-                print("recv None → 切断")
                 break
 
             data = json.loads(fernet.decrypt(raw).decode())
@@ -96,7 +102,8 @@ def handle_client(conn, addr):
             msg_type = data.get("type")
 
             if msg_type == "calendar_get":
-                broadcast_calendar()
+                # ★ 要求した人にだけ返す
+                send_calendar(conn)
 
             elif msg_type == "calendar_set":
                 date = data["date"]
@@ -106,6 +113,8 @@ def handle_client(conn, addr):
                     calendar_data[date] = events
 
                 print("SAVE:", date, events)
+
+                # ★ 変更時のみ全体同期
                 broadcast_calendar()
 
     except Exception as e:
@@ -138,3 +147,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
